@@ -7,20 +7,28 @@ import random
 from collections import deque
 
 class Mario():
-    def __init__(self, state_dim, action_dim, save_dir):
+    def __init__(self, state_dim, action_dim, save_dir,checkpoint=None):
         self.exploration_rate = 1
         self.exploration_rate_decay = 0.99999975
         self.exploration_rate_min = 0.1
+
         self.curr_step = 0
         self.save_every = 5e5  # no. of experiences between saving Mario Net
         self.state_dim = state_dim
         self.action_dim = action_dim
         self.save_dir = save_dir
-        self.device = 'cuda'
+
+        self.use_cuda = torch.cuda.is_available()
+        self.device = 'cuda' if self.use_cuda else 'cpu'
 
         # Mario's DNN to predict the most optimal action - we implement this in the Learn section
         self.net = MarioNet(self.state_dim, self.action_dim).float()
-        self.net = self.net.to(device=self.device)
+        if self.use_cuda:
+            self.net = self.net.to(device='cuda')
+
+        if checkpoint:
+            print("Loading from checkpoint ............")
+            self.load(checkpoint)
 
         self.memory = deque(maxlen=100000)
         self.batch_size = 32
@@ -45,9 +53,9 @@ class Mario():
         if np.random.rand() < self.exploration_rate:
             action_idx = np.random.randint(self.action_dim)
         else:
-            state = state[0].__array__() if isinstance(state, tuple) else state.__array__()
-            state = torch.tensor(state, device=self.device).unsqueeze(0)
-            action_values = self.net(state, model="online")
+            state = torch.FloatTensor(state).cuda() if self.use_cuda else torch.FloatTensor(state)
+            state = state.unsqueeze(0)
+            action_values = self.net(state, model='online')
             action_idx = torch.argmax(action_values, axis=1).item()
 
         # decrease exploration_rate
@@ -69,18 +77,13 @@ class Mario():
         reward (float),
         done(bool))
         """
-        def first_if_tuple(x):
-            return x[0] if isinstance(x, tuple) else x
-        state = first_if_tuple(state).__array__()
-        next_state = first_if_tuple(next_state).__array__()
+        state = torch.FloatTensor(state).cuda() if self.use_cuda else torch.FloatTensor(state)
+        next_state = torch.FloatTensor(next_state).cuda() if self.use_cuda else torch.FloatTensor(next_state)
+        action = torch.LongTensor([action]).cuda() if self.use_cuda else torch.LongTensor([action])
+        reward = torch.DoubleTensor([reward]).cuda() if self.use_cuda else torch.DoubleTensor([reward])
+        done = torch.BoolTensor([done]).cuda() if self.use_cuda else torch.BoolTensor([done])
 
-        state = torch.tensor(state, device=self.device)
-        next_state = torch.tensor(next_state, device=self.device)
-        action = torch.tensor([action], device=self.device)
-        reward = torch.tensor([reward], device=self.device)
-        done = torch.tensor([done], device=self.device)
-
-        self.memory.append((state, next_state, action, reward, done,))
+        self.memory.append( (state, next_state, action, reward, done,) )
 
     def recall(self):
         """
@@ -118,18 +121,14 @@ class Mario():
         return (td_est.mean().item(), loss)
 
     def td_estimate(self, state, action):
-        current_Q = self.net(state, model="online")[
-            np.arange(0, self.batch_size), action
-        ]  # Q_online(s,a)
+        current_Q = self.net(state, model="online")[np.arange(0, self.batch_size), action]  # Q_online(s,a)
         return current_Q
 
     @torch.no_grad()
     def td_target(self, reward, next_state, done):
         next_state_Q = self.net(next_state, model="online")
         best_action = torch.argmax(next_state_Q, axis=1)
-        next_Q = self.net(next_state, model="target")[
-            np.arange(0, self.batch_size), best_action
-        ]
+        next_Q = self.net(next_state, model="target")[np.arange(0, self.batch_size), best_action]
         return (reward + (1 - done.float()) * self.gamma * next_Q).float()
 
     def update_Q_online(self, td_estimate, td_target):
@@ -151,6 +150,19 @@ class Mario():
             save_path,
         )
         print(f"MarioNet saved to {save_path} at step {self.curr_step}")
+
+    def load(self, path):
+        if not path:
+            print("Path is not provided")
+        
+        ckp = torch.load(path, map_location=(self.device))
+        exploration_rate = ckp.get('exploration_rate')
+        state_dict = ckp.get('model')
+
+        print(f"Loading model at {path} with exploration rate {exploration_rate}")
+        self.net.load_state_dict(state_dict)
+        self.exploration_rate = exploration_rate
+
 
 class MarioNet(nn.Module):
     """mini cnn structure

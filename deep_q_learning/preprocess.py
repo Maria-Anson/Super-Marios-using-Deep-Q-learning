@@ -1,8 +1,7 @@
 import gym
 from gym.spaces import Box
 
-import torch
-from torchvision import transforms as T
+from skimage import transform
 
 import numpy as np
 
@@ -26,26 +25,6 @@ class SkipFrame(gym.Wrapper):
                 break
         return obs, total_reward, done, info
 
-# It converts the rgb image to a greyscale image and changes the value to C,H,W format
-class GrayScaleObservation(gym.ObservationWrapper):
-    def __init__(self, env):
-        super().__init__(env)
-        # Getting the first two dimension other than rgb value
-        obs_shape = self.observation_space.shape[:2]
-        self.observation_space = Box(low=0, high=255, shape=obs_shape, dtype=np.uint8)
-
-    def permute_orientation(self, observation):
-        # permute [H, W, C] array to [C, H, W] tensor
-        observation = np.transpose(observation, (2, 0, 1))
-        observation = torch.tensor(observation.copy(), dtype=torch.float)
-        return observation
-
-    def observation(self, observation):
-        observation = self.permute_orientation(observation)
-        transform = T.Grayscale()
-        observation = transform(observation)
-        return observation
-
 # Scales down the grayscale image to 1xshapexshape based on the shape variable
 class ResizeObservation(gym.ObservationWrapper):
     def __init__(self, env, shape):
@@ -59,9 +38,9 @@ class ResizeObservation(gym.ObservationWrapper):
         self.observation_space = Box(low=0, high=255, shape=obs_shape, dtype=np.uint8)
 
     def observation(self, observation):
-        transforms = T.Compose(
-            [T.Resize(self.shape), T.Normalize(0, 255)]
-        )
-        observation = transforms(observation).squeeze(0)
-        return observation
+        resize_obs = transform.resize(observation, self.shape)
+        # cast float back to uint8
+        resize_obs *= 255
+        resize_obs = resize_obs.astype(np.uint8)
+        return resize_obs
 

@@ -20,11 +20,11 @@ class SkipFrame(gym.Wrapper):
         total_reward = 0.0
         for i in range(self._skip):
             # Accumulate reward and repeat the same action
-            obs, reward, done, trunk, info = self.env.step(action)
+            obs, reward, done, info = self.env.step(action)
             total_reward += reward
             if done:
                 break
-        return obs, total_reward, done, trunk, info
+        return obs, total_reward, done, info
 
 # It converts the rgb image to a greyscale image and changes the value to C,H,W format
 class GrayScaleObservation(gym.ObservationWrapper):

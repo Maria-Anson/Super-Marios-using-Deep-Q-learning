@@ -16,7 +16,7 @@ class Mario():
         self.state_dim = state_dim
         self.action_dim = action_dim
         self.save_dir = save_dir
-        self.device = 'cpu'
+        self.device = 'cuda'
 
         # Mario's DNN to predict the most optimal action - we implement this in the Learn section
         self.net = MarioNet(self.state_dim, self.action_dim).float()

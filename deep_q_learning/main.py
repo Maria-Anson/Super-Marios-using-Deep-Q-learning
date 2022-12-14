@@ -22,18 +22,25 @@ from nes_py.wrappers import JoypadSpace
 # Super Mario environment for OpenAI Gym
 import gym_super_mario_bros
 
-env = gym_super_mario_bros.make("SuperMarioBros-1-1-v0", render_mode='rgb_array', apply_api_compatibility=True)
+if gym.__version__ < '0.26':
+    env = gym_super_mario_bros.make("SuperMarioBros-1-1-v0")
+else:
+    env = gym_super_mario_bros.make("SuperMarioBros-1-1-v0", render_mode='rgb', apply_api_compatibility=True)
+
 env = JoypadSpace(env, [["right"], ["right", "A"]])
 env.reset()
 
-next_state, reward, done, trunc, info = env.step(action=0)
-print(f"Next state dimension : {next_state.shape},\n Reward : {reward},\n Done val : {done},\n Trunc : {trunc} \n Info :{info}")
+next_state, reward, done, info = env.step(action=0)
+print(f"Next state dimension : {next_state.shape},\n Reward : {reward},\n Done val : {done},\n Info :{info}")
 
 # Apply Wrappers to environment
 env = SkipFrame(env, skip=4)
 env = GrayScaleObservation(env)
 env = ResizeObservation(env, shape=84)
-env = FrameStack(env, num_stack=4)
+if gym.__version__ < '0.26':
+    env = FrameStack(env, num_stack=4)
+else:
+    env = FrameStack(env, num_stack=4)
 
 use_cuda = torch.cuda.is_available()
 print(f"Using CUDA: {use_cuda}")
@@ -59,7 +66,7 @@ for e in range(episodes):
         action = mario.act(state)
 
         # Agent performs action
-        next_state, reward, done, trunc, info = env.step(action)
+        next_state, reward, done, info = env.step(action)
 
         # Remember
         mario.cache(state, next_state, action, reward, done)
